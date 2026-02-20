@@ -15,26 +15,28 @@
             touch-action: none;
         }
         
-        #ui-layer {
+        /* Bekas UI baru di sebelah Kanan Atas */
+        #ui-right {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
+            top: 20px;
+            right: 20px;
             pointer-events: none;
-            padding: 20px;
             display: flex;
-            justify-content: center;
-            gap: 20px;
+            flex-direction: column; /* Susun menegak */
+            align-items: flex-end;
+            gap: 15px;
             z-index: 10;
         }
 
         .status-panel {
             background: rgba(255, 255, 255, 0.9);
-            border-radius: 24px;
-            padding: 10px 25px;
+            border-radius: 20px;
+            padding: 10px 20px;
             box-shadow: 0 8px 20px rgba(6, 182, 212, 0.2);
             text-align: center;
             border: 2px solid #22d3ee;
+            pointer-events: auto;
+            min-width: 100px;
         }
 
         #game-over {
@@ -65,16 +67,41 @@
             transition: opacity 0.3s;
             z-index: 5;
         }
+
+        /* Gaya butang tutup webview di Kiri Atas */
+        .close-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 50;
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid #06b6d4;
+            color: #0891b2;
+            font-weight: bold;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            box-shadow: 0 4px 10px rgba(6, 182, 212, 0.2);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .close-btn:active {
+            transform: scale(0.95);
+        }
     </style>
 </head>
 <body>
 
+    <!-- Butang Kembali ke Unity -->
+    <button onclick="goHome()" class="close-btn">🔙 Back to Game</button>
+
     <div id="limit-line"></div>
 
-    <div id="ui-layer">
+    <!-- UI Panel di Kanan Atas -->
+    <div id="ui-right">
         <div class="status-panel">
             <div class="text-[10px] text-cyan-600 font-bold uppercase tracking-widest">Skor</div>
-            <div id="score" class="text-3xl font-black text-gray-700">0</div>
+            <div id="score" class="text-2xl font-black text-gray-700 leading-tight mt-1">0</div>
         </div>
         <div class="status-panel">
             <div class="text-[10px] text-cyan-600 font-bold uppercase tracking-widest">Seterusnya</div>
@@ -90,11 +117,28 @@
             <p id="final-score" class="text-3xl font-black text-cyan-600">0</p>
             <p class="text-cyan-500 text-xs font-bold uppercase mt-1">Skor Akhir</p>
         </div>
-        <button onclick="location.reload()" class="bg-cyan-500 hover:bg-cyan-600 text-white font-black py-4 px-10 rounded-full transform transition active:scale-95 shadow-xl w-full">Main Semula</button>
+        <div class="flex flex-col gap-3">
+            <button onclick="location.reload()" class="bg-cyan-500 hover:bg-cyan-600 text-white font-black py-4 px-10 rounded-full transform transition active:scale-95 shadow-xl w-full">Main Semula</button>
+            <button onclick="goHome()" class="bg-white border-2 border-cyan-500 text-cyan-600 font-bold py-3 px-10 rounded-full transform transition active:scale-95 shadow-md w-full">Keluar ke Menu</button>
+        </div>
     </div>
 
     <script>
-        // Data Haiwan (Dikecilkan 20%)
+        // Fungsi untuk WebView Unity
+        function goHome() {
+            if (typeof Unity !== 'undefined') {
+                Unity.call('close_webview');
+            } else {
+                console.log("Unity.call dipanggil. Berfungsi dalam persekitaran Unity.");
+            }
+        }
+
+        // Halang jatuhan haiwan apabila menekan butang UI
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('mousedown', e => e.stopPropagation());
+            btn.addEventListener('touchstart', e => e.stopPropagation());
+        });
+
         const ANIMALS = [
             { id: 0, radius: 12, color: '#94a3b8', type: 0, score: 2 },
             { id: 1, radius: 18, color: '#fbbf24', type: 1, score: 4 },
@@ -104,6 +148,320 @@
             { id: 5, radius: 52, color: '#334155', type: 5, score: 64 },
             { id: 6, radius: 64, color: '#4ade80', type: 6, score: 128 }, 
         ];
+
+        function drawVectorAnimal(ctx, type, radius, wobbleX = 1, wobbleY = 1) {
+            ctx.save();
+            ctx.scale(wobbleX, wobbleY);
+            
+            let color = '#94a3b8';
+            if (type === 0) color = '#94a3b8'; 
+            if (type === 1) color = '#f59e0b'; 
+            if (type === 2) color = '#fee2e2'; 
+            if (type === 3) color = '#f97316'; 
+            if (type === 4) color = '#f1f5f9'; 
+            if (type === 5) color = '#ffffff'; 
+            if (type === 6) color = '#4ade80'; 
+
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, Math.PI * 1.2, Math.PI * 1.8);
+            ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+            ctx.lineWidth = radius * 0.1;
+            ctx.stroke();
+
+            ctx.fillStyle = color;
+            if (type === 0) { 
+                ctx.beginPath(); ctx.arc(-radius*0.7, -radius*0.7, radius*0.4, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(radius*0.7, -radius*0.7, radius*0.4, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#fda4af';
+                ctx.beginPath(); ctx.arc(-radius*0.7, -radius*0.7, radius*0.2, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(radius*0.7, -radius*0.7, radius*0.2, 0, Math.PI*2); ctx.fill();
+            } else if (type === 2) { 
+                ctx.beginPath(); ctx.ellipse(-radius*0.4, -radius*1.1, radius*0.2, radius*0.6, 0, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(radius*0.4, -radius*1.1, radius*0.2, radius*0.6, 0, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#fda4af';
+                ctx.beginPath(); ctx.ellipse(-radius*0.4, -radius*1.1, radius*0.1, radius*0.4, 0, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(radius*0.4, -radius*1.1, radius*0.1, radius*0.4, 0, 0, Math.PI*2); ctx.fill();
+            } else if (type === 3 || type === 4) { 
+                ctx.beginPath(); ctx.moveTo(-radius*0.8, -radius*0.4); ctx.lineTo(-radius*0.4, -radius*1.2); ctx.lineTo(-radius*0.1, -radius*0.8); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(radius*0.8, -radius*0.4); ctx.lineTo(radius*0.4, -radius*1.2); ctx.lineTo(radius*0.1, -radius*0.8); ctx.fill();
+            } else if (type === 5) { 
+                ctx.fillStyle = '#1e293b';
+                ctx.beginPath(); ctx.arc(-radius*0.7, -radius*0.7, radius*0.3, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(radius*0.7, -radius*0.7, radius*0.3, 0, Math.PI*2); ctx.fill();
+            }
+
+            ctx.fillStyle = '#1e293b';
+            if (type === 5) { 
+                ctx.beginPath(); ctx.ellipse(-radius*0.4, -radius*0.1, radius*0.25, radius*0.2, 0.2, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(radius*0.4, -radius*0.1, radius*0.25, radius*0.2, -0.2, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = 'white';
+            }
+            
+            ctx.beginPath(); ctx.arc(-radius*0.4, -radius*0.1, radius*0.1, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(radius*0.4, -radius*0.1, radius*0.1, 0, Math.PI*2); ctx.fill();
+            
+            ctx.fillStyle = 'white';
+            ctx.beginPath(); ctx.arc(-radius*0.44, -radius*0.14, radius*0.03, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(radius*0.36, -radius*0.14, radius*0.03, 0, Math.PI*2); ctx.fill();
+
+            ctx.fillStyle = '#fda4af';
+            ctx.beginPath(); ctx.arc(0, radius*0.15, radius*0.08, 0, Math.PI*2); ctx.fill();
+            
+            ctx.globalAlpha = 0.3;
+            ctx.beginPath(); ctx.arc(-radius*0.6, radius*0.1, radius*0.15, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(radius*0.6, radius*0.1, radius*0.15, 0, Math.PI*2); ctx.fill();
+            ctx.globalAlpha = 1.0;
+
+            ctx.restore();
+        }
+
+        const { Engine, Render, Runner, World, Bodies, Body, Events, Composite } = Matter;
+        const engine = Engine.create();
+        engine.gravity.y = 0.6; 
+
+        const render = Render.create({
+            element: document.body,
+            engine: engine,
+            options: {
+                width: window.innerWidth,
+                height: window.innerHeight,
+                wireframes: false,
+                background: 'transparent'
+            }
+        });
+
+        let score = 0;
+        let currentNextIndex = 0;
+        let currentHeldIndex = 0;
+        let isGameOver = false;
+        let canDrop = true;
+        let gameWidth = window.innerWidth;
+        let gameHeight = window.innerHeight;
+
+        let bowlBaseWidth = Math.min(gameWidth * 0.50, 310); 
+        let wallThickness = 20;
+        let bowlBottomY = gameHeight * 0.90;
+        const wallHeight = 310; 
+        
+        const wallAngle = 15 * (Math.PI / 180);
+        const extraWidthAtTop = wallHeight * Math.tan(wallAngle);
+        const bowlTopWidth = bowlBaseWidth + (2 * extraWidthAtTop);
+        let limitLineY = bowlBottomY - wallHeight + 40;
+
+        document.getElementById('limit-line').style.top = limitLineY + 'px';
+
+        const wallOptions = { isStatic: true, render: { fillStyle: 'transparent' }, label: 'wall', friction: 0.2, restitution: 0.5 };
+        const ground = Bodies.rectangle(gameWidth/2, bowlBottomY, bowlBaseWidth, wallThickness, wallOptions);
+        const leftWall = Bodies.rectangle((gameWidth/2) - (bowlBaseWidth/2) - (extraWidthAtTop/2), bowlBottomY - (wallHeight/2), wallThickness, wallHeight + 20, { ...wallOptions, angle: -wallAngle });
+        const rightWall = Bodies.rectangle((gameWidth/2) + (bowlBaseWidth/2) + (extraWidthAtTop/2), bowlBottomY - (wallHeight/2), wallThickness, wallHeight + 20, { ...wallOptions, angle: wallAngle });
+        World.add(engine.world, [ground, leftWall, rightWall]);
+
+        let dropperX = gameWidth / 2;
+        // Oleh kerana tengah dah kosong, kita boleh mula dari kedudukan yang sedikit selesa (100px)
+        let dropY = 100;
+
+        function updateNextUI() {
+            const canvas = document.getElementById('next-canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0,0,60,60);
+            ctx.save();
+            ctx.translate(30, 35);
+            drawVectorAnimal(ctx, currentNextIndex, ANIMALS[currentNextIndex].radius * 0.6);
+            ctx.restore();
+        }
+
+        function spawnAnimal(x, y, index, isFalling = true) {
+            const config = ANIMALS[index];
+            const animal = Bodies.circle(x, y, config.radius, {
+                restitution: 0.5,
+                friction: 0.3,
+                density: 0.002,
+                label: 'animal'
+            });
+            animal.animalIndex = index;
+            animal.wobblePhase = Math.random() * 10;
+            animal.spawnTime = Date.now(); 
+            
+            if (isFalling) {
+                Body.setVelocity(animal, { x: 0, y: 0 }); 
+                Body.setAngularVelocity(animal, (Math.random() - 0.5) * 0.02);
+                World.add(engine.world, animal);
+            }
+            return animal;
+        }
+
+        function updateDropper(clientX) {
+            if(isGameOver) return;
+            const safePadding = 45; 
+            let minX = (gameWidth/2) - (bowlTopWidth/2) + safePadding;
+            let maxX = (gameWidth/2) + (bowlTopWidth/2) - safePadding;
+            dropperX = Math.max(minX, Math.min(maxX, clientX));
+        }
+
+        window.addEventListener('mousemove', e => updateDropper(e.clientX));
+        window.addEventListener('touchmove', e => {
+            if (e.target.tagName !== 'BUTTON') {
+                e.preventDefault();
+                updateDropper(e.touches[0].clientX);
+            }
+        }, { passive: false });
+
+        const handleDrop = (e) => {
+            if (!canDrop || isGameOver || e.target.tagName === 'BUTTON') return;
+            canDrop = false;
+            spawnAnimal(dropperX, dropY, currentHeldIndex);
+            currentHeldIndex = currentNextIndex;
+            currentNextIndex = Math.floor(Math.random() * 4);
+            updateNextUI();
+            setTimeout(() => { canDrop = true; }, 600);
+        };
+
+        window.addEventListener('mouseup', handleDrop);
+        window.addEventListener('touchend', handleDrop);
+
+        Events.on(engine, 'collisionStart', (event) => {
+            if (isGameOver) return;
+            event.pairs.forEach(pair => {
+                const { bodyA, bodyB } = pair;
+                if (bodyA.label === 'animal' && bodyB.label === 'animal' && bodyA.animalIndex === bodyB.animalIndex) {
+                    const idx = bodyA.animalIndex;
+                    if (idx < ANIMALS.length - 1) {
+                        const midX = (bodyA.position.x + bodyB.position.x) / 2;
+                        const midY = (bodyA.position.y + bodyB.position.y) / 2;
+                        World.remove(engine.world, [bodyA, bodyB]);
+                        const newAnimal = spawnAnimal(midX, midY, idx + 1, true); 
+                        newAnimal.spawnTime = 0; 
+                        score += ANIMALS[idx + 1].score;
+                        document.getElementById('score').innerText = score;
+                    }
+                }
+            });
+        });
+
+        setInterval(() => {
+            if (isGameOver) return;
+            const bodies = Composite.allBodies(engine.world);
+            const now = Date.now();
+            let danger = false;
+            
+            for (let body of bodies) {
+                if (body.label === 'animal') {
+                    if (body.position.y > gameHeight + 50) {
+                        triggerGameOver();
+                        return;
+                    }
+
+                    if (now - body.spawnTime > 3000) {
+                        if (body.position.y < limitLineY) {
+                            danger = true;
+                            const speed = Math.sqrt(body.velocity.x**2 + body.velocity.y**2);
+                            if (speed < 0.15) {
+                                triggerGameOver();
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+            document.getElementById('limit-line').style.opacity = danger ? 1 : 0;
+        }, 500);
+
+        function triggerGameOver() {
+            if(isGameOver) return;
+            isGameOver = true;
+            document.getElementById('game-over').style.display = 'block';
+            document.getElementById('final-score').innerText = score;
+        }
+
+        Events.on(render, 'afterRender', () => {
+            const ctx = render.context;
+            const time = engine.timing.timestamp;
+
+            ctx.save();
+            ctx.beginPath();
+            let bL = (gameWidth/2) - (bowlBaseWidth/2);
+            let bR = (gameWidth/2) + (bowlBaseWidth/2);
+            let botY = bowlBottomY - 5;
+            let tL = bL - extraWidthAtTop;
+            let tR = bR + extraWidthAtTop;
+
+            ctx.moveTo(tL, limitLineY - 10);
+            ctx.lineTo(bL, botY - 20);
+            ctx.quadraticCurveTo(bL, botY, bL + 20, botY);
+            ctx.lineTo(bR - 20, botY);
+            ctx.quadraticCurveTo(bR, botY, bR, botY - 20);
+            ctx.lineTo(tR, limitLineY - 10);
+
+            ctx.lineWidth = 14;
+            ctx.strokeStyle = '#00acc1'; 
+            ctx.lineCap = 'round';
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(0, 172, 193, 0.25)'; 
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.moveTo(tR - 20, limitLineY + 30);
+            ctx.lineTo(bR - 15, botY - 30);
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.stroke();
+            ctx.restore();
+
+            if (!isGameOver && canDrop) {
+                ctx.save();
+                ctx.translate(dropperX, dropY);
+                
+                ctx.beginPath();
+                ctx.setLineDash([8, 8]);
+                ctx.moveTo(0, 0);
+                ctx.lineTo(0, gameHeight);
+                ctx.strokeStyle = 'rgba(6, 182, 212, 0.5)'; 
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                let wobble = 1 + Math.sin(time * 0.005) * 0.03;
+                drawVectorAnimal(ctx, currentHeldIndex, ANIMALS[currentHeldIndex].radius, wobble, 1/wobble);
+                ctx.restore();
+            }
+
+            Composite.allBodies(engine.world).forEach(body => {
+                if (body.label === 'animal') {
+                    ctx.save();
+                    ctx.translate(body.position.x, body.position.y);
+                    ctx.rotate(body.angle);
+                    
+                    let phase = body.wobblePhase + time * 0.005;
+                    let wX = 1 + Math.sin(phase) * 0.05;
+                    let wY = 1 + Math.cos(phase) * 0.05;
+                    
+                    if (body.speed > 2) {
+                        wY += body.speed * 0.02;
+                        wX -= body.speed * 0.01;
+                    }
+
+                    drawVectorAnimal(ctx, body.animalIndex, ANIMALS[body.animalIndex].radius, wX, wY);
+                    ctx.restore();
+                }
+            });
+        });
+
+        currentHeldIndex = Math.floor(Math.random() * 3);
+        currentNextIndex = Math.floor(Math.random() * 3);
+        updateNextUI();
+        Runner.run(Runner.create(), engine);
+        Render.run(render);
+        window.addEventListener('resize', () => location.reload());
+
+    </script>
+</body>
+</html>
+
+
 
         function drawVectorAnimal(ctx, type, radius, wobbleX = 1, wobbleY = 1) {
             ctx.save();
