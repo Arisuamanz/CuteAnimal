@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="ms">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ani-Merge: Edisi Cyan Bersama Memori</title>
+    <title>Ani-Merge: Tanpa Efek Kembang</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -110,7 +110,7 @@
     <div id="game-over">
         <div class="text-6xl mb-4">🌊</div>
         <h2 class="text-2xl font-black text-gray-800 mb-2">Mangkuk Penuh!</h2>
-        <p class="text-gray-500 mb-6 font-medium">Haiwan lucu Anda telah meluap keluar.</p>
+        <p class="text-gray-500 mb-6 font-medium">Haiwan comel anda telah melimpah keluar.</p>
         <div class="bg-cyan-50 rounded-2xl p-4 mb-8">
             <p id="final-score" class="text-3xl font-black text-cyan-600">0</p>
             <p class="text-cyan-500 text-xs font-bold uppercase mt-1 mb-2">Skor Akhir</p>
@@ -122,7 +122,7 @@
     </div>
 
     <script>
-        // Data Hewan
+        // Data Haiwan
         const ANIMALS = [
             { id: 0, radius: 12, color: '#94a3b8', type: 0, score: 2 },
             { id: 1, radius: 18, color: '#fbbf24', type: 1, score: 4 },
@@ -133,9 +133,9 @@
             { id: 6, radius: 64, color: '#4ade80', type: 6, score: 128 }, 
         ];
 
-        function drawVectorAnimal(ctx, type, radius, wobbleX = 1, wobbleY = 1) {
+        // Fungsi lukis haiwan, buang fungsi wobbleX dan wobbleY (skala sentiasa 1)
+        function drawVectorAnimal(ctx, type, radius) {
             ctx.save();
-            ctx.scale(wobbleX, wobbleY);
             
             let color = '#94a3b8';
             if (type === 0) color = '#94a3b8'; 
@@ -252,7 +252,7 @@
         let dropperX = gameWidth / 2;
         let dropY = 100;
 
-        // Array untuk menyimpan efek letupan teks
+        // Array untuk menyimpan kesan letupan teks
         let explosions = [];
 
         function updateNextUI() {
@@ -274,7 +274,7 @@
                 label: 'animal'
             });
             animal.animalIndex = index;
-            animal.wobblePhase = Math.random() * 10;
+            // Buang wobblePhase sebab dah tak pakai
             animal.spawnTime = Date.now(); 
             
             if (isFalling) {
@@ -314,12 +314,11 @@
         window.addEventListener('mouseup', handleDrop);
         window.addEventListener('touchend', handleDrop);
 
-        // Perbarui Skor
+        // Kemaskini Skor
         function addScore(points) {
             score += points;
             document.getElementById('score').innerText = score;
             
-            // Periksa & simpan Skor Tertinggi baru
             if (score > highScore) {
                 highScore = score;
                 localStorage.setItem('aniMergeHighScore', highScore);
@@ -333,7 +332,6 @@
                 const { bodyA, bodyB } = pair;
                 if (bodyA.label === 'animal' && bodyB.label === 'animal' && bodyA.animalIndex === bodyB.animalIndex) {
                     
-                    // Pencegahan agar tidak digabung dua kali di frame yang sama
                     if (bodyA.isMerging || bodyB.isMerging) return;
                     bodyA.isMerging = true;
                     bodyB.isMerging = true;
@@ -343,21 +341,16 @@
                     const midY = (bodyA.position.y + bodyB.position.y) / 2;
 
                     if (idx < ANIMALS.length - 1) {
-                        // Gabungan Normal
+                        // Gabungan Biasa
                         World.remove(engine.world, [bodyA, bodyB]);
                         const newAnimal = spawnAnimal(midX, midY, idx + 1, true); 
                         newAnimal.spawnTime = 0; 
-                        
-                        // Tambah skor menggunakan fungsi baru
                         addScore(ANIMALS[idx + 1].score);
-                    } else if (idx === ANIMALS.length - 1) {
-                        // Gabungan Terbesar (Hewan Terakhir - Hilang & Meledak)
-                        World.remove(engine.world, [bodyA, bodyB]);
                         
-                        // Tambahkan skor ganda sebagai bonus
+                    } else if (idx === ANIMALS.length - 1) {
+                        // Gabungan Haiwan Paling Besar (Meletup/Hilang)
+                        World.remove(engine.world, [bodyA, bodyB]);
                         addScore(ANIMALS[idx].score * 2);
-
-                        // Tambahkan efek letupan teks
                         explosions.push({ x: midX, y: midY, time: Date.now() });
                     }
                 }
@@ -434,6 +427,7 @@
             ctx.stroke();
             ctx.restore();
 
+            // Lukis Penunjuk Jatuh (Dropper Guide)
             if (!isGameOver && canDrop) {
                 ctx.save();
                 ctx.translate(dropperX, dropY);
@@ -446,52 +440,43 @@
                 ctx.lineWidth = 2;
                 ctx.stroke();
                 
-                let wobble = 1 + Math.sin(time * 0.005) * 0.03;
-                drawVectorAnimal(ctx, currentHeldIndex, ANIMALS[currentHeldIndex].radius, wobble, 1/wobble);
+                // Lukis tanpa kesan wobble
+                drawVectorAnimal(ctx, currentHeldIndex, ANIMALS[currentHeldIndex].radius);
                 ctx.restore();
             }
 
+            // Lukis Haiwan Fizikal
             Composite.allBodies(engine.world).forEach(body => {
                 if (body.label === 'animal' && !body.isMerging) {
                     ctx.save();
                     ctx.translate(body.position.x, body.position.y);
                     ctx.rotate(body.angle);
                     
-                    let phase = body.wobblePhase + time * 0.005;
-                    let wX = 1 + Math.sin(phase) * 0.05;
-                    let wY = 1 + Math.cos(phase) * 0.05;
-                    
-                    if (body.speed > 2) {
-                        wY += body.speed * 0.02;
-                        wX -= body.speed * 0.01;
-                    }
-
-                    drawVectorAnimal(ctx, body.animalIndex, ANIMALS[body.animalIndex].radius, wX, wY);
+                    // Lukis bentuk asal yang statik dan bulat sempurna
+                    drawVectorAnimal(ctx, body.animalIndex, ANIMALS[body.animalIndex].radius);
                     ctx.restore();
                 }
             });
 
-            // Efek Letupan Teks (Untuk hewan hijau maksimal)
+            // Kesan Letupan Teks (BOOM)
             const now = Date.now();
-            explosions = explosions.filter(exp => now - exp.time < 1200); // Hidup selama 1.2 saat
+            explosions = explosions.filter(exp => now - exp.time < 1200); 
             
             explosions.forEach(exp => {
                 let progress = (now - exp.time) / 1200;
                 ctx.save();
-                ctx.translate(exp.x, exp.y - (progress * 80)); // Teks terapung ke atas
-                ctx.globalAlpha = 1 - progress; // Teks memudar secara beransur-ansur
+                ctx.translate(exp.x, exp.y - (progress * 80)); 
+                ctx.globalAlpha = 1 - progress; 
                 
                 ctx.font = "900 36px 'Segoe UI', Arial, sans-serif";
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
                 
-                // Stroke Teks (Garis Besar)
                 ctx.lineWidth = 6;
                 ctx.strokeStyle = "white";
                 ctx.strokeText("BOOM!", 0, 0);
                 
-                // Isi Teks
-                ctx.fillStyle = "#4ade80"; // Warna Hijau sesuai haiwan terbesar
+                ctx.fillStyle = "#4ade80"; 
                 ctx.fillText("BOOM!", 0, 0);
                 ctx.restore();
             });
@@ -507,4 +492,5 @@
     </script>
 </body>
 </html>
+
 
