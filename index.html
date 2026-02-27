@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ani-Merge: Tanpa Efek Kembang</title>
+    <title>Ani-Merge: Audio API</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -122,7 +122,80 @@
     </div>
 
     <script>
-        // Data Haiwan
+        // ==========================================
+        // SISTEM AUDIO (WEB AUDIO API)
+        // ==========================================
+        let audioCtx;
+
+        // Inisialisasi Audio Context pada sentuhan pertama (Polisi Pelayar)
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        // Bunyi Pop untuk cantuman biasa
+        function playPopSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            osc.type = 'sine';
+            // Nada naik sedikit untuk efek "pop" comel
+            osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+            
+            gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        // Bunyi Boom/Api untuk letupan haiwan terbesar
+        function playBoomSound() {
+            if (!audioCtx) return;
+            
+            // Jana 'White Noise' untuk simulasi bunyi api/letupan
+            const bufferSize = audioCtx.sampleRate * 2; // 2 saat durasi
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1; 
+            }
+            
+            const noiseSource = audioCtx.createBufferSource();
+            noiseSource.buffer = buffer;
+            
+            // Penapis Lowpass untuk membuatkan noise berbunyi seperti letupan mendalam (bass)
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(800, audioCtx.currentTime);
+            filter.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 1.5);
+            
+            // Pengawal Kelantangan (Mengecil secara beransur-ansur)
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.setValueAtTime(1.5, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
+            
+            noiseSource.connect(filter);
+            filter.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            noiseSource.start();
+            noiseSource.stop(audioCtx.currentTime + 2);
+        }
+
+
+        // ==========================================
+        // DATA & GRAFIK HAIWAN
+        // ==========================================
         const ANIMALS = [
             { id: 0, radius: 12, color: '#94a3b8', type: 0, score: 2 },
             { id: 1, radius: 18, color: '#fbbf24', type: 1, score: 4 },
@@ -133,7 +206,7 @@
             { id: 6, radius: 64, color: '#4ade80', type: 6, score: 128 }, 
         ];
 
-        // Fungsi lukis haiwan, buang fungsi wobbleX dan wobbleY (skala sentiasa 1)
+        // Fungsi lukis haiwan (Bentuk Statik, tanpa Wobble)
         function drawVectorAnimal(ctx, type, radius) {
             ctx.save();
             
@@ -146,17 +219,20 @@
             if (type === 5) color = '#ffffff'; 
             if (type === 6) color = '#4ade80'; 
 
+            // Badan
             ctx.beginPath();
             ctx.arc(0, 0, radius, 0, Math.PI * 2);
             ctx.fillStyle = color;
             ctx.fill();
             
+            // Highlight Kaca Tepi
             ctx.beginPath();
             ctx.arc(0, 0, radius, Math.PI * 1.2, Math.PI * 1.8);
             ctx.strokeStyle = 'rgba(255,255,255,0.4)';
             ctx.lineWidth = radius * 0.1;
             ctx.stroke();
 
+            // Telinga
             ctx.fillStyle = color;
             if (type === 0) { 
                 ctx.beginPath(); ctx.arc(-radius*0.7, -radius*0.7, radius*0.4, 0, Math.PI*2); ctx.fill();
@@ -179,23 +255,22 @@
                 ctx.beginPath(); ctx.arc(radius*0.7, -radius*0.7, radius*0.3, 0, Math.PI*2); ctx.fill();
             }
 
+            // Mata
             ctx.fillStyle = '#1e293b';
             if (type === 5) { 
                 ctx.beginPath(); ctx.ellipse(-radius*0.4, -radius*0.1, radius*0.25, radius*0.2, 0.2, 0, Math.PI*2); ctx.fill();
                 ctx.beginPath(); ctx.ellipse(radius*0.4, -radius*0.1, radius*0.25, radius*0.2, -0.2, 0, Math.PI*2); ctx.fill();
                 ctx.fillStyle = 'white';
             }
-            
             ctx.beginPath(); ctx.arc(-radius*0.4, -radius*0.1, radius*0.1, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.arc(radius*0.4, -radius*0.1, radius*0.1, 0, Math.PI*2); ctx.fill();
-            
             ctx.fillStyle = 'white';
             ctx.beginPath(); ctx.arc(-radius*0.44, -radius*0.14, radius*0.03, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.arc(radius*0.36, -radius*0.14, radius*0.03, 0, Math.PI*2); ctx.fill();
 
+            // Mulut/Pipi
             ctx.fillStyle = '#fda4af';
             ctx.beginPath(); ctx.arc(0, radius*0.15, radius*0.08, 0, Math.PI*2); ctx.fill();
-            
             ctx.globalAlpha = 0.3;
             ctx.beginPath(); ctx.arc(-radius*0.6, radius*0.1, radius*0.15, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.arc(radius*0.6, radius*0.1, radius*0.15, 0, Math.PI*2); ctx.fill();
@@ -204,9 +279,12 @@
             ctx.restore();
         }
 
-        const { Engine, Render, Runner, World, Bodies, Body, Events, Composite } = Matter;
+        // ==========================================
+        // ENJIN FIZIK MATTER.JS
+        // ==========================================
+        const { Engine, Render, World, Bodies, Body, Events, Composite } = Matter;
         const engine = Engine.create();
-        engine.gravity.y = 0.6; 
+        engine.gravity.y = 0.6; // Graviti Konsisten
 
         const render = Render.create({
             element: document.body,
@@ -219,7 +297,7 @@
             }
         });
 
-        // Sistem Skor & Memori (Local Storage)
+        // Skor & Memori
         let score = 0;
         let highScore = localStorage.getItem('aniMergeHighScore') || 0;
         document.getElementById('high-score').innerText = highScore;
@@ -231,6 +309,7 @@
         let gameWidth = window.innerWidth;
         let gameHeight = window.innerHeight;
 
+        // Binaan Mangkuk
         let bowlBaseWidth = Math.min(gameWidth * 0.50, 310); 
         let wallThickness = 20;
         let bowlBottomY = gameHeight * 0.90;
@@ -251,8 +330,6 @@
 
         let dropperX = gameWidth / 2;
         let dropY = 100;
-
-        // Array untuk menyimpan kesan letupan teks
         let explosions = [];
 
         function updateNextUI() {
@@ -274,7 +351,6 @@
                 label: 'animal'
             });
             animal.animalIndex = index;
-            // Buang wobblePhase sebab dah tak pakai
             animal.spawnTime = Date.now(); 
             
             if (isFalling) {
@@ -293,7 +369,14 @@
             dropperX = Math.max(minX, Math.min(maxX, clientX));
         }
 
-        window.addEventListener('mousemove', e => updateDropper(e.clientX));
+        // ==========================================
+        // KAWALAN PEMAIN
+        // ==========================================
+        window.addEventListener('mousemove', e => {
+            initAudio(); // Aktifkan audio pada input tetikus
+            updateDropper(e.clientX);
+        });
+        
         window.addEventListener('touchmove', e => {
             if (e.target.tagName !== 'BUTTON') {
                 e.preventDefault();
@@ -301,9 +384,15 @@
             }
         }, { passive: false });
 
+        window.addEventListener('touchstart', () => {
+            initAudio(); // Aktifkan audio pada sentuhan telefon
+        }, { once: true });
+
         const handleDrop = (e) => {
             if (!canDrop || isGameOver || e.target.tagName === 'BUTTON') return;
             canDrop = false;
+            initAudio();
+            
             spawnAnimal(dropperX, dropY, currentHeldIndex);
             currentHeldIndex = currentNextIndex;
             currentNextIndex = Math.floor(Math.random() * 4);
@@ -314,7 +403,9 @@
         window.addEventListener('mouseup', handleDrop);
         window.addEventListener('touchend', handleDrop);
 
-        // Kemaskini Skor
+        // ==========================================
+        // LOGIK PENGGABUNGAN & SKOR
+        // ==========================================
         function addScore(points) {
             score += points;
             document.getElementById('score').innerText = score;
@@ -341,22 +432,25 @@
                     const midY = (bodyA.position.y + bodyB.position.y) / 2;
 
                     if (idx < ANIMALS.length - 1) {
-                        // Gabungan Biasa
+                        // Gabungan Biasa (Bunyi Pop)
                         World.remove(engine.world, [bodyA, bodyB]);
                         const newAnimal = spawnAnimal(midX, midY, idx + 1, true); 
                         newAnimal.spawnTime = 0; 
                         addScore(ANIMALS[idx + 1].score);
+                        playPopSound(); // Mainkan bunyi pop comel
                         
                     } else if (idx === ANIMALS.length - 1) {
-                        // Gabungan Haiwan Paling Besar (Meletup/Hilang)
+                        // Haiwan Maksimal Hilang (Bunyi BOOM)
                         World.remove(engine.world, [bodyA, bodyB]);
                         addScore(ANIMALS[idx].score * 2);
                         explosions.push({ x: midX, y: midY, time: Date.now() });
+                        playBoomSound(); // Mainkan bunyi letupan/api
                     }
                 }
             });
         });
 
+        // Loop Pengecekan Game Over
         setInterval(() => {
             if (isGameOver) return;
             const bodies = Composite.allBodies(engine.world);
@@ -393,10 +487,13 @@
             document.getElementById('final-high-score').innerText = 'Skor Tertinggi: ' + highScore;
         }
 
+        // ==========================================
+        // RENDER VISUAL EFEK
+        // ==========================================
         Events.on(render, 'afterRender', () => {
             const ctx = render.context;
-            const time = engine.timing.timestamp;
 
+            // Gambar Mangkuk
             ctx.save();
             ctx.beginPath();
             let bL = (gameWidth/2) - (bowlBaseWidth/2);
@@ -427,7 +524,7 @@
             ctx.stroke();
             ctx.restore();
 
-            // Lukis Penunjuk Jatuh (Dropper Guide)
+            // Penunjuk Jatuh
             if (!isGameOver && canDrop) {
                 ctx.save();
                 ctx.translate(dropperX, dropY);
@@ -440,35 +537,36 @@
                 ctx.lineWidth = 2;
                 ctx.stroke();
                 
-                // Lukis tanpa kesan wobble
+                // Lukis tanpa wobble
                 drawVectorAnimal(ctx, currentHeldIndex, ANIMALS[currentHeldIndex].radius);
                 ctx.restore();
             }
 
-            // Lukis Haiwan Fizikal
+            // Gambar Hewan di Dunia
             Composite.allBodies(engine.world).forEach(body => {
                 if (body.label === 'animal' && !body.isMerging) {
                     ctx.save();
                     ctx.translate(body.position.x, body.position.y);
                     ctx.rotate(body.angle);
                     
-                    // Lukis bentuk asal yang statik dan bulat sempurna
+                    // Lukis bentuk asal
                     drawVectorAnimal(ctx, body.animalIndex, ANIMALS[body.animalIndex].radius);
                     ctx.restore();
                 }
             });
 
-            // Kesan Letupan Teks (BOOM)
+            // Efek Ledakan BOOM! dengan sedikit elemen api
             const now = Date.now();
             explosions = explosions.filter(exp => now - exp.time < 1200); 
             
             explosions.forEach(exp => {
                 let progress = (now - exp.time) / 1200;
                 ctx.save();
-                ctx.translate(exp.x, exp.y - (progress * 80)); 
+                ctx.translate(exp.x, exp.y - (progress * 100)); // Naik lebih tinggi
                 ctx.globalAlpha = 1 - progress; 
                 
-                ctx.font = "900 36px 'Segoe UI', Arial, sans-serif";
+                // Teks Letupan
+                ctx.font = "900 42px 'Segoe UI', Arial, sans-serif";
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
                 
@@ -476,17 +574,50 @@
                 ctx.strokeStyle = "white";
                 ctx.strokeText("BOOM!", 0, 0);
                 
-                ctx.fillStyle = "#4ade80"; 
+                ctx.fillStyle = "#ff5722"; // Tukar warna oren/merah (api)
                 ctx.fillText("BOOM!", 0, 0);
                 ctx.restore();
             });
         });
 
+        // ==========================================
+        // FIXED TIMESTEP LOOP (ISU 120HZ / 60HZ)
+        // ==========================================
+        let lastTime = 0;
+        let accumulator = 0;
+        const timeStep = 1000 / 60; 
+
+        function gameLoop(time) {
+            requestAnimationFrame(gameLoop);
+            
+            if (!lastTime) {
+                lastTime = time;
+                return;
+            }
+            
+            let deltaTime = time - lastTime;
+            lastTime = time;
+            
+            if (deltaTime > 100) deltaTime = timeStep;
+            
+            accumulator += deltaTime;
+            
+            while (accumulator >= timeStep) {
+                Engine.update(engine, timeStep);
+                accumulator -= timeStep;
+            }
+            
+            Render.world(render);
+        }
+
+        // Inisialisasi Game
         currentHeldIndex = Math.floor(Math.random() * 3);
         currentNextIndex = Math.floor(Math.random() * 3);
         updateNextUI();
-        Runner.run(Runner.create(), engine);
-        Render.run(render);
+        
+        requestAnimationFrame(gameLoop);
+
+        // Resize Layar
         window.addEventListener('resize', () => location.reload());
 
     </script>
