@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ms">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ani-Merge: Audio API</title>
+    <title>Ani-Merge: Enhanced Audio</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -15,7 +15,6 @@
             touch-action: none;
         }
         
-        /* UI di Kanan Atas (Skor & Seterusnya) */
         #ui-right {
             position: absolute;
             top: 20px;
@@ -28,7 +27,6 @@
             z-index: 10;
         }
 
-        /* UI di Kiri Atas (Skor Tertinggi) */
         #ui-left {
             position: absolute;
             top: 20px;
@@ -80,90 +78,126 @@
             transition: opacity 0.3s;
             z-index: 5;
         }
+
+        .limit-label {
+            position: absolute;
+            right: 10px;
+            top: -20px;
+            color: #ef4444;
+            font-weight: bold;
+            font-size: 10px;
+            background: rgba(255,255,255,0.8);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
 
-    <div id="limit-line"></div>
+    <div id="limit-line"><div class="limit-label">DANGER!</div></div>
 
-    <!-- Panel Skor Tertinggi di Kiri -->
+    <!-- UI Left -->
     <div id="ui-left">
         <div class="status-panel">
-            <div class="text-[10px] text-cyan-600 font-bold uppercase tracking-widest">Skor Tertinggi</div>
+            <div class="text-[10px] text-cyan-600 font-bold uppercase tracking-widest">High Score</div>
             <div id="high-score" class="text-2xl font-black text-gray-700 leading-tight mt-1">0</div>
         </div>
     </div>
 
-    <!-- Panel Skor & Seterusnya di Kanan -->
+    <!-- UI Right -->
     <div id="ui-right">
         <div class="status-panel">
-            <div class="text-[10px] text-cyan-600 font-bold uppercase tracking-widest">Skor Semasa</div>
+            <div class="text-[10px] text-cyan-600 font-bold uppercase tracking-widest">Score</div>
             <div id="score" class="text-2xl font-black text-gray-700 leading-tight mt-1">0</div>
         </div>
         <div class="status-panel">
-            <div class="text-[10px] text-cyan-600 font-bold uppercase tracking-widest">Seterusnya</div>
+            <div class="text-[10px] text-cyan-600 font-bold uppercase tracking-widest">Next</div>
             <canvas id="next-canvas" width="60" height="60" class="mt-1"></canvas>
         </div>
     </div>
 
-    <!-- Skrin Kalah -->
+    <!-- Game Over Screen -->
     <div id="game-over">
         <div class="text-6xl mb-4">🌊</div>
-        <h2 class="text-2xl font-black text-gray-800 mb-2">Mangkuk Penuh!</h2>
-        <p class="text-gray-500 mb-6 font-medium">Haiwan comel anda telah melimpah keluar.</p>
+        <h2 class="text-2xl font-black text-gray-800 mb-2">Bowl Full!</h2>
+        <p class="text-gray-500 mb-6 font-medium">Your cute animals overflowed.</p>
         <div class="bg-cyan-50 rounded-2xl p-4 mb-8">
             <p id="final-score" class="text-3xl font-black text-cyan-600">0</p>
-            <p class="text-cyan-500 text-xs font-bold uppercase mt-1 mb-2">Skor Akhir</p>
-            <p id="final-high-score" class="text-sm font-bold text-gray-600 border-t border-cyan-200 pt-2">Skor Tertinggi: 0</p>
+            <p class="text-cyan-500 text-xs font-bold uppercase mt-1 mb-2">Final Score</p>
+            <p id="final-high-score" class="text-sm font-bold text-gray-600 border-t border-cyan-200 pt-2">High Score: 0</p>
         </div>
         <div class="flex flex-col gap-3">
-            <button onclick="location.reload()" class="bg-cyan-500 hover:bg-cyan-600 text-white font-black py-4 px-10 rounded-full transform transition active:scale-95 shadow-xl w-full">Main Semula</button>
+            <button onclick="location.reload()" class="bg-cyan-500 hover:bg-cyan-600 text-white font-black py-4 px-10 rounded-full transform transition active:scale-95 shadow-xl w-full">Play Again</button>
         </div>
     </div>
 
     <script>
         // ==========================================
-        // SISTEM AUDIO (WEB AUDIO API)
+        // AUDIO SYSTEM (WEB AUDIO API)
         // ==========================================
         let audioCtx;
+        let masterGain; 
 
-        // Inisialisasi Audio Context pada sentuhan pertama (Polisi Pelayar)
         function initAudio() {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Master Gain Node set kepada 10.0 seperti yang diminta
+                masterGain = audioCtx.createGain();
+                masterGain.gain.value = 10.0; 
+                masterGain.connect(audioCtx.destination);
             }
             if (audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
         }
 
-        // Bunyi Pop untuk cantuman biasa
-        function playPopSound() {
+        function playDropSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            
+            // Sweep turun cepat
+            osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.1);
+            
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            
+            osc.connect(gain);
+            gain.connect(masterGain); 
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        // Suara Pop dinamis berdasarkan level
+        function playPopSound(level) {
             if (!audioCtx) return;
             const osc = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
             
             osc.type = 'sine';
-            // Nada naik sedikit untuk efek "pop" comel
-            osc.frequency.setValueAtTime(400, audioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+            
+            // Level lebih tinggi = Pitch pop lebih tinggi
+            const baseFreq = 300 + (level * 80); 
+            osc.frequency.setValueAtTime(baseFreq, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, audioCtx.currentTime + 0.1);
             
             gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
             gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
             
             osc.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
+            gainNode.connect(masterGain); 
             
             osc.start();
             osc.stop(audioCtx.currentTime + 0.1);
         }
 
-        // Bunyi Boom/Api untuk letupan haiwan terbesar
         function playBoomSound() {
             if (!audioCtx) return;
             
-            // Jana 'White Noise' untuk simulasi bunyi api/letupan
-            const bufferSize = audioCtx.sampleRate * 2; // 2 saat durasi
+            const bufferSize = audioCtx.sampleRate * 2; 
             const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
             const data = buffer.getChannelData(0);
             for (let i = 0; i < bufferSize; i++) {
@@ -173,28 +207,45 @@
             const noiseSource = audioCtx.createBufferSource();
             noiseSource.buffer = buffer;
             
-            // Penapis Lowpass untuk membuatkan noise berbunyi seperti letupan mendalam (bass)
             const filter = audioCtx.createBiquadFilter();
             filter.type = 'lowpass';
             filter.frequency.setValueAtTime(800, audioCtx.currentTime);
             filter.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 1.5);
             
-            // Pengawal Kelantangan (Mengecil secara beransur-ansur)
             const gainNode = audioCtx.createGain();
-            gainNode.gain.setValueAtTime(1.5, audioCtx.currentTime);
+            gainNode.gain.setValueAtTime(1.0, audioCtx.currentTime);
             gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
             
             noiseSource.connect(filter);
             filter.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
+            gainNode.connect(masterGain); 
             
             noiseSource.start();
             noiseSource.stop(audioCtx.currentTime + 2);
         }
 
+        function playGameOverSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            
+            osc.type = 'sawtooth';
+            // Suara sedih turun perlahan
+            osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 1.2);
+            
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.2);
+            
+            osc.connect(gain);
+            gain.connect(masterGain); 
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 1.2);
+        }
 
         // ==========================================
-        // DATA & GRAFIK HAIWAN
+        // DATA & GRAFIS VEKTOR
         // ==========================================
         const ANIMALS = [
             { id: 0, radius: 12, color: '#94a3b8', type: 0, score: 2 },
@@ -206,7 +257,6 @@
             { id: 6, radius: 64, color: '#4ade80', type: 6, score: 128 }, 
         ];
 
-        // Fungsi lukis haiwan (Bentuk Statik, tanpa Wobble)
         function drawVectorAnimal(ctx, type, radius) {
             ctx.save();
             
@@ -219,20 +269,17 @@
             if (type === 5) color = '#ffffff'; 
             if (type === 6) color = '#4ade80'; 
 
-            // Badan
             ctx.beginPath();
             ctx.arc(0, 0, radius, 0, Math.PI * 2);
             ctx.fillStyle = color;
             ctx.fill();
             
-            // Highlight Kaca Tepi
             ctx.beginPath();
             ctx.arc(0, 0, radius, Math.PI * 1.2, Math.PI * 1.8);
             ctx.strokeStyle = 'rgba(255,255,255,0.4)';
             ctx.lineWidth = radius * 0.1;
             ctx.stroke();
 
-            // Telinga
             ctx.fillStyle = color;
             if (type === 0) { 
                 ctx.beginPath(); ctx.arc(-radius*0.7, -radius*0.7, radius*0.4, 0, Math.PI*2); ctx.fill();
@@ -255,7 +302,6 @@
                 ctx.beginPath(); ctx.arc(radius*0.7, -radius*0.7, radius*0.3, 0, Math.PI*2); ctx.fill();
             }
 
-            // Mata
             ctx.fillStyle = '#1e293b';
             if (type === 5) { 
                 ctx.beginPath(); ctx.ellipse(-radius*0.4, -radius*0.1, radius*0.25, radius*0.2, 0.2, 0, Math.PI*2); ctx.fill();
@@ -268,7 +314,6 @@
             ctx.beginPath(); ctx.arc(-radius*0.44, -radius*0.14, radius*0.03, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.arc(radius*0.36, -radius*0.14, radius*0.03, 0, Math.PI*2); ctx.fill();
 
-            // Mulut/Pipi
             ctx.fillStyle = '#fda4af';
             ctx.beginPath(); ctx.arc(0, radius*0.15, radius*0.08, 0, Math.PI*2); ctx.fill();
             ctx.globalAlpha = 0.3;
@@ -280,11 +325,11 @@
         }
 
         // ==========================================
-        // ENJIN FIZIK MATTER.JS
+        // MESIN FISIKA (MATTER.JS)
         // ==========================================
         const { Engine, Render, World, Bodies, Body, Events, Composite } = Matter;
         const engine = Engine.create();
-        engine.gravity.y = 0.6; // Graviti Konsisten
+        engine.gravity.y = 0.6; 
 
         const render = Render.create({
             element: document.body,
@@ -297,7 +342,6 @@
             }
         });
 
-        // Skor & Memori
         let score = 0;
         let highScore = localStorage.getItem('aniMergeHighScore') || 0;
         document.getElementById('high-score').innerText = highScore;
@@ -305,11 +349,11 @@
         let currentNextIndex = 0;
         let currentHeldIndex = 0;
         let isGameOver = false;
+        let isGameOverSoundPlayed = false;
         let canDrop = true;
         let gameWidth = window.innerWidth;
         let gameHeight = window.innerHeight;
 
-        // Binaan Mangkuk
         let bowlBaseWidth = Math.min(gameWidth * 0.50, 310); 
         let wallThickness = 20;
         let bowlBottomY = gameHeight * 0.90;
@@ -369,11 +413,8 @@
             dropperX = Math.max(minX, Math.min(maxX, clientX));
         }
 
-        // ==========================================
-        // KAWALAN PEMAIN
-        // ==========================================
         window.addEventListener('mousemove', e => {
-            initAudio(); // Aktifkan audio pada input tetikus
+            initAudio(); 
             updateDropper(e.clientX);
         });
         
@@ -384,14 +425,14 @@
             }
         }, { passive: false });
 
-        window.addEventListener('touchstart', () => {
-            initAudio(); // Aktifkan audio pada sentuhan telefon
-        }, { once: true });
+        window.addEventListener('touchstart', () => initAudio(), { once: true });
+        window.addEventListener('mousedown', () => initAudio(), { once: true });
 
         const handleDrop = (e) => {
             if (!canDrop || isGameOver || e.target.tagName === 'BUTTON') return;
             canDrop = false;
             initAudio();
+            playDropSound(); 
             
             spawnAnimal(dropperX, dropY, currentHeldIndex);
             currentHeldIndex = currentNextIndex;
@@ -403,13 +444,9 @@
         window.addEventListener('mouseup', handleDrop);
         window.addEventListener('touchend', handleDrop);
 
-        // ==========================================
-        // LOGIK PENGGABUNGAN & SKOR
-        // ==========================================
         function addScore(points) {
             score += points;
             document.getElementById('score').innerText = score;
-            
             if (score > highScore) {
                 highScore = score;
                 localStorage.setItem('aniMergeHighScore', highScore);
@@ -432,25 +469,22 @@
                     const midY = (bodyA.position.y + bodyB.position.y) / 2;
 
                     if (idx < ANIMALS.length - 1) {
-                        // Gabungan Biasa (Bunyi Pop)
                         World.remove(engine.world, [bodyA, bodyB]);
                         const newAnimal = spawnAnimal(midX, midY, idx + 1, true); 
                         newAnimal.spawnTime = 0; 
                         addScore(ANIMALS[idx + 1].score);
-                        playPopSound(); // Mainkan bunyi pop comel
+                        playPopSound(idx); 
                         
                     } else if (idx === ANIMALS.length - 1) {
-                        // Haiwan Maksimal Hilang (Bunyi BOOM)
                         World.remove(engine.world, [bodyA, bodyB]);
                         addScore(ANIMALS[idx].score * 2);
                         explosions.push({ x: midX, y: midY, time: Date.now() });
-                        playBoomSound(); // Mainkan bunyi letupan/api
+                        playBoomSound(); 
                     }
                 }
             });
         });
 
-        // Loop Pengecekan Game Over
         setInterval(() => {
             if (isGameOver) return;
             const bodies = Composite.allBodies(engine.world);
@@ -482,18 +516,21 @@
         function triggerGameOver() {
             if(isGameOver) return;
             isGameOver = true;
+            
+            if (!isGameOverSoundPlayed) {
+                playGameOverSound(); 
+                isGameOverSoundPlayed = true;
+            }
+
             document.getElementById('game-over').style.display = 'block';
             document.getElementById('final-score').innerText = score;
-            document.getElementById('final-high-score').innerText = 'Skor Tertinggi: ' + highScore;
+            document.getElementById('final-high-score').innerText = 'High Score: ' + highScore;
         }
 
-        // ==========================================
-        // RENDER VISUAL EFEK
-        // ==========================================
+        // --- RENDER ---
         Events.on(render, 'afterRender', () => {
             const ctx = render.context;
 
-            // Gambar Mangkuk
             ctx.save();
             ctx.beginPath();
             let bL = (gameWidth/2) - (bowlBaseWidth/2);
@@ -524,7 +561,6 @@
             ctx.stroke();
             ctx.restore();
 
-            // Penunjuk Jatuh
             if (!isGameOver && canDrop) {
                 ctx.save();
                 ctx.translate(dropperX, dropY);
@@ -537,35 +573,29 @@
                 ctx.lineWidth = 2;
                 ctx.stroke();
                 
-                // Lukis tanpa wobble
                 drawVectorAnimal(ctx, currentHeldIndex, ANIMALS[currentHeldIndex].radius);
                 ctx.restore();
             }
 
-            // Gambar Hewan di Dunia
             Composite.allBodies(engine.world).forEach(body => {
                 if (body.label === 'animal' && !body.isMerging) {
                     ctx.save();
                     ctx.translate(body.position.x, body.position.y);
                     ctx.rotate(body.angle);
-                    
-                    // Lukis bentuk asal
                     drawVectorAnimal(ctx, body.animalIndex, ANIMALS[body.animalIndex].radius);
                     ctx.restore();
                 }
             });
 
-            // Efek Ledakan BOOM! dengan sedikit elemen api
             const now = Date.now();
             explosions = explosions.filter(exp => now - exp.time < 1200); 
             
             explosions.forEach(exp => {
                 let progress = (now - exp.time) / 1200;
                 ctx.save();
-                ctx.translate(exp.x, exp.y - (progress * 100)); // Naik lebih tinggi
+                ctx.translate(exp.x, exp.y - (progress * 100)); 
                 ctx.globalAlpha = 1 - progress; 
                 
-                // Teks Letupan
                 ctx.font = "900 42px 'Segoe UI', Arial, sans-serif";
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
@@ -573,51 +603,38 @@
                 ctx.lineWidth = 6;
                 ctx.strokeStyle = "white";
                 ctx.strokeText("BOOM!", 0, 0);
-                
-                ctx.fillStyle = "#ff5722"; // Tukar warna oren/merah (api)
+                ctx.fillStyle = "#ff5722"; 
                 ctx.fillText("BOOM!", 0, 0);
                 ctx.restore();
             });
         });
 
-        // ==========================================
-        // FIXED TIMESTEP LOOP (ISU 120HZ / 60HZ)
-        // ==========================================
+        // --- DELTA TIME LOOP ---
         let lastTime = 0;
         let accumulator = 0;
         const timeStep = 1000 / 60; 
 
         function gameLoop(time) {
             requestAnimationFrame(gameLoop);
-            
-            if (!lastTime) {
-                lastTime = time;
-                return;
-            }
-            
+            if (!lastTime) { lastTime = time; return; }
             let deltaTime = time - lastTime;
             lastTime = time;
             
             if (deltaTime > 100) deltaTime = timeStep;
-            
             accumulator += deltaTime;
             
             while (accumulator >= timeStep) {
                 Engine.update(engine, timeStep);
                 accumulator -= timeStep;
             }
-            
             Render.world(render);
         }
 
-        // Inisialisasi Game
         currentHeldIndex = Math.floor(Math.random() * 3);
         currentNextIndex = Math.floor(Math.random() * 3);
         updateNextUI();
-        
         requestAnimationFrame(gameLoop);
 
-        // Resize Layar
         window.addEventListener('resize', () => location.reload());
 
     </script>
