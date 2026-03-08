@@ -90,11 +90,35 @@
             padding: 2px 6px;
             border-radius: 4px;
         }
+
+        #retry-btn {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 12;
+            border: 2px solid #06b6d4;
+            background: rgba(255, 255, 255, 0.92);
+            color: #0f172a;
+            font-weight: 900;
+            font-size: 12px;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            padding: 10px 18px;
+            border-radius: 999px;
+            box-shadow: 0 8px 20px rgba(6, 182, 212, 0.26);
+            cursor: pointer;
+        }
+
+        #retry-btn:active {
+            transform: translateX(-50%) scale(0.96);
+        }
     </style>
 </head>
 <body>
 
     <div id="limit-line"><div class="limit-label">DANGER!</div></div>
+    <button id="retry-btn" onclick="location.reload()">Retry</button>
 
     <!-- UI Left -->
     <div id="ui-left">
@@ -137,6 +161,23 @@
         // ==========================================
         let audioCtx;
         let masterGain; 
+        let musicGain;
+        let musicFilter;
+        let themeTimer = null;
+        let themeStep = 0;
+        const THEME_BASE_GAIN = 0.222;
+        const THEME_BEAT = 0.62;
+        const THEME_LOOKAHEAD = 0.35;
+        const COZY_THEME = [
+            { bass: 48, chord: [60, 64, 67], lead: 72 },
+            { bass: 50, chord: [62, 65, 69], lead: 74 },
+            { bass: 45, chord: [57, 60, 64], lead: 69 },
+            { bass: 47, chord: [59, 62, 65], lead: 71 },
+            { bass: 48, chord: [60, 64, 67], lead: 74 },
+            { bass: 45, chord: [57, 60, 64], lead: 72 },
+            { bass: 43, chord: [55, 59, 62], lead: 67 },
+            { bass: 47, chord: [59, 62, 65], lead: 71 },
+        ];
 
         function initAudio() {
             if (!audioCtx) {
@@ -146,10 +187,21 @@
                 masterGain = audioCtx.createGain();
                 masterGain.gain.value = 10.0; 
                 masterGain.connect(audioCtx.destination);
+
+                musicFilter = audioCtx.createBiquadFilter();
+                musicFilter.type = 'lowpass';
+                musicFilter.frequency.value = 1500;
+                musicFilter.Q.value = 0.6;
+
+                musicGain = audioCtx.createGain();
+                musicGain.gain.value = 0.0001;
+                musicFilter.connect(musicGain);
+                musicGain.connect(masterGain);
             }
             if (audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
+            startMainTheme();
         }
 
         function playDropSound() {
@@ -244,6 +296,77 @@
             osc.stop(audioCtx.currentTime + 1.2);
         }
 
+        function midiToFreq(midi) {
+            return 440 * Math.pow(2, (midi - 69) / 12);
+        }
+
+        function playThemeVoice(freq, when, duration, type, volume, attack = 0.03, release = 0.25, detune = 0) {
+            if (!audioCtx || !musicFilter || !musicGain) return;
+
+            const osc = audioCtx.createOscillator();
+            const env = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, when);
+            osc.detune.setValueAtTime(detune, when);
+
+            env.gain.setValueAtTime(0.0001, when);
+            env.gain.exponentialRampToValueAtTime(volume, when + attack);
+            env.gain.exponentialRampToValueAtTime(0.0001, when + duration + release);
+
+            osc.connect(env);
+            env.connect(musicFilter);
+            osc.start(when);
+            osc.stop(when + duration + release + 0.02);
+        }
+
+        function scheduleThemeStep(when) {
+            const step = COZY_THEME[themeStep % COZY_THEME.length];
+            const bar = THEME_BEAT;
+            const padDur = bar * 1.8;
+
+            step.chord.forEach((midi, idx) => {
+                playThemeVoice(midiToFreq(midi), when, padDur, 'triangle', 0.04, 0.04, 0.32, (idx - 1) * 2);
+            });
+
+            playThemeVoice(midiToFreq(step.bass), when, bar * 0.95, 'sine', 0.06, 0.01, 0.2);
+            playThemeVoice(midiToFreq(step.bass + 12), when + bar * 0.5, bar * 0.42, 'sine', 0.032, 0.01, 0.16);
+            playThemeVoice(midiToFreq(step.lead), when + bar * 0.16, bar * 0.34, 'sine', 0.028, 0.015, 0.16);
+            playThemeVoice(midiToFreq(step.lead - 2), when + bar * 0.66, bar * 0.28, 'sine', 0.023, 0.015, 0.15);
+
+            themeStep++;
+        }
+
+        function startMainTheme() {
+            if (!audioCtx || !musicGain || themeTimer || isGameOver) return;
+
+            const now = audioCtx.currentTime;
+            musicGain.gain.cancelScheduledValues(now);
+            musicGain.gain.setValueAtTime(Math.max(0.0001, musicGain.gain.value), now);
+            musicGain.gain.linearRampToValueAtTime(THEME_BASE_GAIN, now + 0.8);
+
+            let nextNoteTime = now + 0.05;
+            themeTimer = setInterval(() => {
+                if (!audioCtx || audioCtx.state !== 'running' || isGameOver) return;
+                while (nextNoteTime < audioCtx.currentTime + THEME_LOOKAHEAD) {
+                    scheduleThemeStep(nextNoteTime);
+                    nextNoteTime += THEME_BEAT;
+                }
+            }, 100);
+        }
+
+        function stopMainTheme(fadeOut = 0.6) {
+            if (themeTimer) {
+                clearInterval(themeTimer);
+                themeTimer = null;
+            }
+            if (!audioCtx || !musicGain) return;
+
+            const now = audioCtx.currentTime;
+            musicGain.gain.cancelScheduledValues(now);
+            musicGain.gain.setValueAtTime(Math.max(0.0001, musicGain.gain.value), now);
+            musicGain.gain.linearRampToValueAtTime(0.0001, now + fadeOut);
+        }
+
         // ==========================================
         // DATA & GRAFIS VEKTOR
         // ==========================================
@@ -259,67 +382,150 @@
 
         function drawVectorAnimal(ctx, type, radius) {
             ctx.save();
-            
-            let color = '#94a3b8';
-            if (type === 0) color = '#94a3b8'; 
-            if (type === 1) color = '#f59e0b'; 
-            if (type === 2) color = '#fee2e2'; 
-            if (type === 3) color = '#f97316'; 
-            if (type === 4) color = '#f1f5f9'; 
-            if (type === 5) color = '#ffffff'; 
-            if (type === 6) color = '#4ade80'; 
 
+            const cuteStyles = [
+                { base: '#94a3b8', highlight: '#cbd5e1', shadow: '#64748b', blush: '#fda4af', inner: '#fecdd3' },
+                { base: '#f59e0b', highlight: '#fde68a', shadow: '#d97706', blush: '#fb7185', inner: '#fef3c7' },
+                { base: '#fee2e2', highlight: '#fff1f2', shadow: '#fda4af', blush: '#fb7185', inner: '#fbcfe8' },
+                { base: '#fb923c', highlight: '#fdba74', shadow: '#ea580c', blush: '#fb7185', inner: '#ffedd5' },
+                { base: '#f1f5f9', highlight: '#ffffff', shadow: '#cbd5e1', blush: '#fda4af', inner: '#f8fafc' },
+                { base: '#ffffff', highlight: '#f8fafc', shadow: '#d1d5db', blush: '#fda4af', inner: '#e2e8f0' },
+                { base: '#4ade80', highlight: '#86efac', shadow: '#22c55e', blush: '#fb7185', inner: '#dcfce7' }
+            ];
+            const style = cuteStyles[type] || cuteStyles[0];
+
+            const drawEye = (x, y, eyeR) => {
+                ctx.fillStyle = '#111827';
+                ctx.beginPath();
+                ctx.ellipse(x, y, eyeR, eyeR * 1.05, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(x - eyeR * 0.35, y - eyeR * 0.35, eyeR * 0.34, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(x + eyeR * 0.2, y + eyeR * 0.15, eyeR * 0.14, 0, Math.PI * 2);
+                ctx.fill();
+            };
+
+            // Back features first so they appear behind the face.
+            ctx.fillStyle = style.base;
+            if (type === 0 || type === 4) {
+                ctx.beginPath(); ctx.arc(-radius * 0.68, -radius * 0.68, radius * 0.38, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(radius * 0.68, -radius * 0.68, radius * 0.38, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = style.inner;
+                ctx.beginPath(); ctx.arc(-radius * 0.68, -radius * 0.68, radius * 0.2, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(radius * 0.68, -radius * 0.68, radius * 0.2, 0, Math.PI * 2); ctx.fill();
+            } else if (type === 2) {
+                ctx.beginPath(); ctx.ellipse(-radius * 0.44, -radius * 1.08, radius * 0.21, radius * 0.66, -0.1, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(radius * 0.44, -radius * 1.08, radius * 0.21, radius * 0.66, 0.1, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = style.inner;
+                ctx.beginPath(); ctx.ellipse(-radius * 0.44, -radius * 1.1, radius * 0.11, radius * 0.45, -0.1, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(radius * 0.44, -radius * 1.1, radius * 0.11, radius * 0.45, 0.1, 0, Math.PI * 2); ctx.fill();
+            } else if (type === 3) {
+                ctx.beginPath(); ctx.moveTo(-radius * 0.84, -radius * 0.3); ctx.lineTo(-radius * 0.46, -radius * 1.16); ctx.lineTo(-radius * 0.08, -radius * 0.76); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(radius * 0.84, -radius * 0.3); ctx.lineTo(radius * 0.46, -radius * 1.16); ctx.lineTo(radius * 0.08, -radius * 0.76); ctx.fill();
+                ctx.fillStyle = style.inner;
+                ctx.beginPath(); ctx.moveTo(-radius * 0.62, -radius * 0.45); ctx.lineTo(-radius * 0.45, -radius * 0.92); ctx.lineTo(-radius * 0.26, -radius * 0.63); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(radius * 0.62, -radius * 0.45); ctx.lineTo(radius * 0.45, -radius * 0.92); ctx.lineTo(radius * 0.26, -radius * 0.63); ctx.fill();
+            } else if (type === 5) {
+                ctx.fillStyle = '#1e293b';
+                ctx.beginPath(); ctx.arc(-radius * 0.7, -radius * 0.7, radius * 0.31, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(radius * 0.7, -radius * 0.7, radius * 0.31, 0, Math.PI * 2); ctx.fill();
+            } else if (type === 6) {
+                ctx.fillStyle = style.highlight;
+                ctx.beginPath(); ctx.arc(-radius * 0.42, -radius * 0.7, radius * 0.26, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(radius * 0.42, -radius * 0.7, radius * 0.26, 0, Math.PI * 2); ctx.fill();
+            }
+
+            const headGradient = ctx.createRadialGradient(
+                -radius * 0.34, -radius * 0.44, radius * 0.14,
+                0, 0, radius * 1.12
+            );
+            headGradient.addColorStop(0, style.highlight);
+            headGradient.addColorStop(1, style.base);
+            ctx.fillStyle = headGradient;
             ctx.beginPath();
             ctx.arc(0, 0, radius, 0, Math.PI * 2);
-            ctx.fillStyle = color;
             ctx.fill();
-            
+
+            // Soft chin shadow for depth.
+            ctx.fillStyle = style.shadow;
+            ctx.globalAlpha = 0.2;
             ctx.beginPath();
-            ctx.arc(0, 0, radius, Math.PI * 1.2, Math.PI * 1.8);
-            ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-            ctx.lineWidth = radius * 0.1;
+            ctx.ellipse(0, radius * 0.34, radius * 0.78, radius * 0.45, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+
+            ctx.beginPath();
+            ctx.arc(0, 0, radius * 0.95, Math.PI * 1.18, Math.PI * 1.82);
+            ctx.strokeStyle = 'rgba(255,255,255,0.52)';
+            ctx.lineWidth = Math.max(1.5, radius * 0.09);
             ctx.stroke();
 
-            ctx.fillStyle = color;
-            if (type === 0) { 
-                ctx.beginPath(); ctx.arc(-radius*0.7, -radius*0.7, radius*0.4, 0, Math.PI*2); ctx.fill();
-                ctx.beginPath(); ctx.arc(radius*0.7, -radius*0.7, radius*0.4, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = '#fda4af';
-                ctx.beginPath(); ctx.arc(-radius*0.7, -radius*0.7, radius*0.2, 0, Math.PI*2); ctx.fill();
-                ctx.beginPath(); ctx.arc(radius*0.7, -radius*0.7, radius*0.2, 0, Math.PI*2); ctx.fill();
-            } else if (type === 2) { 
-                ctx.beginPath(); ctx.ellipse(-radius*0.4, -radius*1.1, radius*0.2, radius*0.6, 0, 0, Math.PI*2); ctx.fill();
-                ctx.beginPath(); ctx.ellipse(radius*0.4, -radius*1.1, radius*0.2, radius*0.6, 0, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = '#fda4af';
-                ctx.beginPath(); ctx.ellipse(-radius*0.4, -radius*1.1, radius*0.1, radius*0.4, 0, 0, Math.PI*2); ctx.fill();
-                ctx.beginPath(); ctx.ellipse(radius*0.4, -radius*1.1, radius*0.1, radius*0.4, 0, 0, Math.PI*2); ctx.fill();
-            } else if (type === 3 || type === 4) { 
-                ctx.beginPath(); ctx.moveTo(-radius*0.8, -radius*0.4); ctx.lineTo(-radius*0.4, -radius*1.2); ctx.lineTo(-radius*0.1, -radius*0.8); ctx.fill();
-                ctx.beginPath(); ctx.moveTo(radius*0.8, -radius*0.4); ctx.lineTo(radius*0.4, -radius*1.2); ctx.lineTo(radius*0.1, -radius*0.8); ctx.fill();
-            } else if (type === 5) { 
+            if (type === 1) {
+                ctx.fillStyle = '#f59e0b';
+                ctx.beginPath();
+                ctx.moveTo(0, -radius * 1.05);
+                ctx.lineTo(radius * 0.12, -radius * 0.78);
+                ctx.lineTo(-radius * 0.12, -radius * 0.78);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            if (type === 3) {
+                ctx.fillStyle = style.inner;
+                ctx.beginPath();
+                ctx.ellipse(0, radius * 0.16, radius * 0.45, radius * 0.3, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            if (type === 5) {
                 ctx.fillStyle = '#1e293b';
-                ctx.beginPath(); ctx.arc(-radius*0.7, -radius*0.7, radius*0.3, 0, Math.PI*2); ctx.fill();
-                ctx.beginPath(); ctx.arc(radius*0.7, -radius*0.7, radius*0.3, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(-radius * 0.38, -radius * 0.08, radius * 0.25, radius * 0.2, 0.2, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(radius * 0.38, -radius * 0.08, radius * 0.25, radius * 0.2, -0.2, 0, Math.PI * 2); ctx.fill();
             }
 
-            ctx.fillStyle = '#1e293b';
-            if (type === 5) { 
-                ctx.beginPath(); ctx.ellipse(-radius*0.4, -radius*0.1, radius*0.25, radius*0.2, 0.2, 0, Math.PI*2); ctx.fill();
-                ctx.beginPath(); ctx.ellipse(radius*0.4, -radius*0.1, radius*0.25, radius*0.2, -0.2, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = 'white';
+            if (type === 1) {
+                ctx.fillStyle = '#fb923c';
+                ctx.beginPath();
+                ctx.moveTo(0, radius * 0.08);
+                ctx.lineTo(-radius * 0.12, radius * 0.23);
+                ctx.lineTo(radius * 0.12, radius * 0.23);
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                ctx.fillStyle = '#fb7185';
+                ctx.beginPath();
+                ctx.arc(0, radius * 0.14, radius * 0.09, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#374151';
+                ctx.lineWidth = Math.max(1.2, radius * 0.045);
+                ctx.beginPath();
+                ctx.arc(0, radius * 0.2, radius * 0.18, 0.15, Math.PI - 0.15);
+                ctx.stroke();
             }
-            ctx.beginPath(); ctx.arc(-radius*0.4, -radius*0.1, radius*0.1, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(radius*0.4, -radius*0.1, radius*0.1, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = 'white';
-            ctx.beginPath(); ctx.arc(-radius*0.44, -radius*0.14, radius*0.03, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(radius*0.36, -radius*0.14, radius*0.03, 0, Math.PI*2); ctx.fill();
 
-            ctx.fillStyle = '#fda4af';
-            ctx.beginPath(); ctx.arc(0, radius*0.15, radius*0.08, 0, Math.PI*2); ctx.fill();
-            ctx.globalAlpha = 0.3;
-            ctx.beginPath(); ctx.arc(-radius*0.6, radius*0.1, radius*0.15, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(radius*0.6, radius*0.1, radius*0.15, 0, Math.PI*2); ctx.fill();
-            ctx.globalAlpha = 1.0;
+            let eyeY = -radius * 0.08;
+            if (type === 6) eyeY = -radius * 0.26;
+            if (type === 1) eyeY = -radius * 0.04;
+            const eyeX = type === 2 ? radius * 0.33 : radius * 0.37;
+            const eyeR = Math.max(1.8, radius * 0.11);
+            drawEye(-eyeX, eyeY, eyeR);
+            drawEye(eyeX, eyeY, eyeR);
+
+            ctx.fillStyle = style.blush;
+            ctx.globalAlpha = 0.38;
+            ctx.beginPath(); ctx.ellipse(-radius * 0.58, radius * 0.12, radius * 0.17, radius * 0.12, -0.2, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(radius * 0.58, radius * 0.12, radius * 0.17, radius * 0.12, 0.2, 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = 1;
+
+            if (type === 6) {
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath(); ctx.arc(-radius * 0.44, -radius * 0.76, radius * 0.07, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(radius * 0.4, -radius * 0.78, radius * 0.07, 0, Math.PI * 2); ctx.fill();
+            }
 
             ctx.restore();
         }
@@ -516,6 +722,7 @@
         function triggerGameOver() {
             if(isGameOver) return;
             isGameOver = true;
+            stopMainTheme(0.3);
             
             if (!isGameOverSoundPlayed) {
                 playGameOverSound(); 
@@ -640,5 +847,3 @@
     </script>
 </body>
 </html>
-
-
